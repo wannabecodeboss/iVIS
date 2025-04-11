@@ -1,120 +1,138 @@
-// Firebase config
-const firebaseConfig = {
-    apiKey: "AIzaSyDRbU-AP9bY9QX1IGjBv_K-PQ6c9KOPQ_E",
-    authDomain: "anpr-bg.firebaseapp.com",
-    databaseURL: "https://anpr-bg-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "anpr-bg",
-    storageBucket: "anpr-bg.appspot.com",
-    messagingSenderId: "1059960578017",
-    appId: "1:1059960578017:web:cd2c0158052e4e1388bca0"
-};
+<!-- Include Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+<script>
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyDRbU-AP9bY9QX1IGjBv_K-PQ6c9KOPQ_E",
+        authDomain: "anpr-bg.firebaseapp.com",
+        databaseURL: "https://anpr-bg-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "anpr-bg",
+        storageBucket: "anpr-bg.appspot.com",
+        messagingSenderId: "1059960578017",
+        appId: "1:1059960578017:web:cd2c0158052e4e1388bca0"
+    };
 
-// Add Faculty Vehicle
-function addFaculty() {
-    const name = document.getElementById("facultyName").value.trim();
-    const plate = document.getElementById("facultyPlate").value.trim();
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    if (!name || !plate) {
-        alert("Please enter both name and number plate!");
-        return;
+    // Add Faculty Vehicle
+    function addFaculty() {
+        const name = document.getElementById("facultyName").value.trim();
+        const plate = document.getElementById("facultyPlate").value.trim();
+
+        if (!name || !plate) {
+            alert("Please enter both name and number plate!");
+            return;
+        }
+
+        db.ref("faculty/" + plate).set(name)
+            .then(() => {
+                console.log("Faculty vehicle added!");
+                document.getElementById("facultyName").value = "";
+                document.getElementById("facultyPlate").value = "";
+            })
+            .catch((error) => {
+                console.error("Error adding faculty vehicle:", error);
+            });
     }
 
-    // Save directly as string
-    db.ref("faculty/" + plate).set(name)
-    .then(() => {
-        console.log("Faculty vehicle added!");
-        document.getElementById("facultyName").value = "";
-        document.getElementById("facultyPlate").value = "";
-    }).catch((error) => {
-        console.error("Error adding faculty vehicle:", error);
-    });
-}
+    // Display Faculty Vehicles
+    function displayFacultyVehicles() {
+        const facultyTable = document.getElementById("facultyTable").getElementsByTagName('tbody')[0];
+        facultyTable.innerHTML = "";
 
-// Display Faculty Vehicles in Table Format
-function displayFacultyVehicles() {
-    const facultyTable = document.getElementById("facultyTable").getElementsByTagName('tbody')[0];
-    facultyTable.innerHTML = ""; // Clear table before updating
+        db.ref("faculty").on("value", (snapshot) => {
+            facultyTable.innerHTML = "";
+            snapshot.forEach((childSnapshot) => {
+                const name = childSnapshot.val();
+                const plate = childSnapshot.key;
 
-    db.ref("faculty").on("value", (snapshot) => {
-        facultyTable.innerHTML = ""; 
-        snapshot.forEach((childSnapshot) => {
-            const name = childSnapshot.val(); // since value is just a string
-            let newRow = facultyTable.insertRow();
+                const row = facultyTable.insertRow();
+                const cell1 = row.insertCell(0);
+                const cell2 = row.insertCell(1);
+                const cell3 = row.insertCell(2);
 
-            let cell1 = newRow.insertCell(0);
-            let cell2 = newRow.insertCell(1);
-            let cell3 = newRow.insertCell(2); // delete button cell
+                cell1.innerText = name;
+                cell2.innerText = plate;
 
-            cell1.innerText = name;
-            cell2.innerText = childSnapshot.key;
+                const deleteBtn = document.createElement("button");
+                deleteBtn.textContent = "Delete";
+                deleteBtn.className = "delete-btn";
+                deleteBtn.onclick = () => deleteFaculty(plate);
 
-            // Create delete button
-            let deleteBtn = document.createElement("button");
-            deleteBtn.textContent = "Delete";
-            deleteBtn.className = "delete-btn"; // optional styling
-            deleteBtn.onclick = () => deleteFaculty(childSnapshot.key);
-
-            cell3.appendChild(deleteBtn);
-        });
-    });
-}
-
-// Delete Faculty Vehicle
-function deleteFaculty(plate) {
-    if (confirm(`Are you sure you want to delete ${plate}?`)) {
-        db.ref("faculty/" + plate).remove()
-        .then(() => {
-            console.log("Deleted successfully");
-        })
-        .catch((error) => {
-            console.error("Error deleting:", error);
+                cell3.appendChild(deleteBtn);
+            });
         });
     }
-}
 
-// Display Outsider Vehicles in Table Format
-function displayOutsiderVehicles() {
-    const outsidersTable = document.getElementById("outsidersTable").getElementsByTagName('tbody')[0];
-    outsidersTable.innerHTML = ""; // Clear table
+    function deleteFaculty(plate) {
+        if (confirm(`Are you sure you want to delete ${plate}?`)) {
+            db.ref("faculty/" + plate).remove()
+                .then(() => {
+                    console.log("Deleted successfully");
+                })
+                .catch((error) => {
+                    console.error("Error deleting:", error);
+                });
+        }
+    }
 
-    db.ref("outsiders").on("value", (snapshot) => {
-        outsidersTable.innerHTML = ""; 
-        snapshot.forEach((childSnapshot) => {
-            const data = childSnapshot.val();
-            const row = outsidersTable.insertRow();
+    // Display Outsider Vehicles - sorted latest first
+    function displayOutsiderVehicles() {
+        const outsidersTable = document.getElementById("outsidersTable").getElementsByTagName('tbody')[0];
+        outsidersTable.innerHTML = "";
 
-            const cell1 = row.insertCell(0);
-            const cell2 = row.insertCell(1);
-            const cell3 = row.insertCell(2);
+        db.ref("outsiders").once("value", (snapshot) => {
+            let entries = [];
 
-            // Support both direct key and nested "plate" key
-            const plate = data.plate || childSnapshot.key;
-            const entry = data.entry || "Unknown";
-            const exit = data.exit || "Not exited yet";
+            snapshot.forEach((childSnapshot) => {
+                const subEntries = childSnapshot.val(); // nested 1, 2, 3...
+                Object.keys(subEntries).forEach((key) => {
+                    const record = subEntries[key];
+                    entries.push({
+                        plate: record.plate || childSnapshot.key,
+                        entry: record.entry || "Unknown",
+                        exit: record.exit || "Not exited yet"
+                    });
+                });
+            });
 
-            cell1.innerText = plate;
-            cell2.innerText = entry;
-            cell3.innerText = exit;
+            // Sort by entry time (assuming HH:MM:SS format)
+            entries.sort((a, b) => b.entry.localeCompare(a.entry));
+
+            entries.forEach((record) => {
+                const row = outsidersTable.insertRow();
+
+                const cell1 = row.insertCell(0);
+                const cell2 = row.insertCell(1);
+                const cell3 = row.insertCell(2);
+
+                cell1.innerText = record.plate;
+                cell2.innerText = record.entry;
+                cell3.innerText = record.exit;
+            });
         });
-    });
-}
+    }
 
-// Example function for adding outsider vehicles (call this from a form)
-function addOutsiderVehicle(plate, entryTime) {
-    if (!plate || !entryTime) return;
-    db.ref("outsiders/" + plate).set({
-        entry: entryTime,
-        exit: null
-    });
-}
+    // Example usage: add outsider vehicle (optional for testing)
+    function addOutsiderVehicle(plate, entryTime) {
+        if (!plate || !entryTime) return;
 
-// Attach event listener for faculty button
-document.getElementById("addFacultyBtn").addEventListener("click", addFaculty);
+        const newEntryRef = db.ref("outsiders/" + plate).push();
+        newEntryRef.set({
+            plate: plate,
+            entry: entryTime,
+            exit: null
+        });
+    }
 
-// Load tables on page load
-displayFacultyVehicles();
-displayOutsiderVehicles();
+    // Attach event listener to add button
+    document.getElementById("addFacultyBtn").addEventListener("click", addFaculty);
+
+    // Initial load
+    displayFacultyVehicles();
+    displayOutsiderVehicles();
+</script>
